@@ -1197,6 +1197,72 @@ void MacroAssembler::lookup_interface_method(Register recv_klass,
   }
 }
 
+// Look up the method for a megamorphic invokeinterface call in a single pass over itable:
+// - check recv_klass (actual object class) is a subtype of resolved_klass from CompiledICHolder
+// - find a holder_klass (class that implements the method) vtable offset and get the method from vtable by index
+// The target method is determined by <holder_klass, itable_index>.
+// The receiver klass is in recv_klass.
+// On success, the result will be in method_result, and execution falls through.
+// On failure, execution transfers to the given label.
+void MacroAssembler::lookup_interface_method_stub(Register recv_klass,
+                                                  Register resolved_klass,
+                                                  Register holder_klass,
+                                                  Register method_result,
+                                                  Register temp_reg,
+                                                  Register temp_reg2,
+                                                  Register temp_reg3,
+                                                  int itable_index,
+                                                  Label& L_no_such_interface) {
+  assert_different_registers(resolved_klass, recv_klass, holder_klass, temp_reg, temp_reg2, temp_reg3);
+  assert_different_registers(method_result, recv_klass, holder_klass, temp_reg, temp_reg2, temp_reg3);
+  int ioffset = itableOffsetEntry::interface_offset_in_bytes();
+  int ooffset = itableOffsetEntry::offset_offset_in_bytes();
+  int vtable_base = in_bytes(Klass::vtable_start_offset());
+  int itentry_off = itableMethodEntry::method_offset_in_bytes();
+  int scan_step   = itableOffsetEntry::size() * wordSize;
+  int vte_size    = vtableEntry::size_in_bytes();
+  assert(vte_size == wordSize, "else adjust times_vte_scale");
+
+  Label loop1, loop2, loop1_internal, found_holder, post_loop1;
+
+  ldrw(temp_reg2, Address(recv_klass, Klass::vtable_length_offset()));
+  add(recv_klass, recv_klass, vtable_base + ioffset);
+  ldr(temp_reg, Address(recv_klass, temp_reg2, Address::lsl(3)));
+  mov(temp_reg3, zr);
+  lea(temp_reg2, Address(recv_klass, temp_reg2, Address::lsl(3)));
+
+  cmp(resolved_klass, holder_klass);
+  br(Assembler::NE, loop1_internal);
+  cmp(holder_klass, temp_reg);
+  br(Assembler::EQ, found_holder);
+  cbz(temp_reg, L_no_such_interface);
+
+  bind(loop2);  // loop2: look for holder_klass record in itable (resolved_class have already been met)
+  ldr(temp_reg, Address(pre(temp_reg2, scan_step)));
+  cmp(holder_klass, temp_reg);
+  br(Assembler::EQ, found_holder);
+  cbnz(temp_reg, loop2);
+  b(L_no_such_interface);
+
+  bind(loop1);  // loop1: look for resolved_class record in itable
+  ldr(temp_reg, Address(pre(temp_reg2, scan_step)));
+  bind(loop1_internal);
+  cmp(holder_klass, temp_reg); // also check if we have met a holder_klass
+  csel(temp_reg3, temp_reg2, temp_reg3, Assembler::EQ);
+  cmp(resolved_klass, temp_reg);
+  br(Assembler::EQ, post_loop1);
+  cbnz(temp_reg, loop1);
+  b(L_no_such_interface);
+  bind(post_loop1);
+  cbz(temp_reg3, loop2);  // goto loop2 if we have not met holder_klass
+  mov(temp_reg2, temp_reg3);
+
+  bind(found_holder);
+  ldrw(method_result, Address(temp_reg2, ooffset - ioffset));
+  add(recv_klass, recv_klass, (itable_index << 3) + itentry_off - (vtable_base + ioffset));
+  ldr(method_result, Address(recv_klass, method_result, Address::uxtw(0)));
+}
+
 // virtual method calling
 void MacroAssembler::lookup_virtual_method(Register recv_klass,
                                            RegisterOrConstant vtable_index,
