@@ -943,8 +943,8 @@ public:
                    bool return_method = true);
 
   void lookup_interface_method_stub(Register recv_klass,
-                                    Register resolved_klass,
                                     Register holder_klass,
+                                    Register resolved_klass,
                                     Register method_result,
                                     Register temp_reg,
                                     Register temp_reg2,
