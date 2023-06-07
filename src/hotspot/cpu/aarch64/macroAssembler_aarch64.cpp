@@ -1217,11 +1217,11 @@ void MacroAssembler::lookup_interface_method_stub(Register recv_klass,
   assert_different_registers(method_result, recv_klass, holder_klass, temp_itbl_klass, scan_temp, holder_offset);
 
   int vtable_base = in_bytes(Klass::vtable_start_offset());
-  int itentry_off = itableMethodEntry::method_offset_in_bytes();
+  int itentry_off = in_bytes(itableMethodEntry::method_offset());
   int scan_step = itableOffsetEntry::size() * wordSize;
   int vte_size = vtableEntry::size_in_bytes();
-  int ioffset = itableOffsetEntry::interface_offset_in_bytes();
-  int ooffset = itableOffsetEntry::offset_offset_in_bytes();
+  int ioffset = in_bytes(itableOffsetEntry::interface_offset());
+  int ooffset = in_bytes(itableOffsetEntry::offset_offset());
   assert(vte_size == wordSize, "else adjust times_vte_scale");
 
   Label L_loop_scan_resolved_entry, L_resolved_found, L_holder_found;
