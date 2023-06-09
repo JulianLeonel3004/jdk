@@ -192,7 +192,8 @@ VtableStub* VtableStubs::create_itable_stub(int itable_index) {
   address npe_addr = __ pc();
   __ load_klass(recv_klass_reg, j_rarg0);
 
-
+  // Receiver subtype check against REFC.
+  // Get selected method from declaring class and itable index
   __ lookup_interface_method_stub(recv_klass_reg, holder_klass_reg, resolved_klass_reg, rmethod,
                                   temp_reg, temp_reg2, temp_reg3, itable_index, L_no_such_interface);
 
